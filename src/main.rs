@@ -47,7 +47,7 @@ fn main() -> Result<(), String> {
     let args = Args::parse();
 
     // Parse end date or default to today.
-    let end_date = match args.end_date {
+    let mut end_date = match args.end_date {
         Some(ref s) => Utc.from_utc_datetime(
             &NaiveDate::parse_from_str(s, DATE_FORMAT_YMD)
                 .expect(&format!("Failed to parse end date: {}", s))
@@ -64,9 +64,13 @@ fn main() -> Result<(), String> {
     let pattern = Pattern::new(&args);
 
     // The start date is the first Sunday before the start of the pattern.
-    let mut start_date = end_date - Duration::days(pattern.width() as i64);
+    let mut start_date = end_date - Duration::days((pattern.width() * PATTERN_HEIGHT) as i64);
+
+    // Shift the start date and end date so it starts on a Sunday.
     while start_date.weekday() != Weekday::Sun {
-        start_date = start_date - Duration::days(1);
+        let one_day = Duration::days(1);
+        start_date = start_date - one_day;
+        end_date = end_date - one_day;
     }
 
     // Prepare the mask.
