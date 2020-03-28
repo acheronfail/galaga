@@ -14,7 +14,7 @@ pub struct Args {
   pub end_date: Option<String>,
 
   /// The template itself.
-  #[clap(short = "p", long = "template")]
+  #[clap(short = "t", long = "template")]
   pub template: Option<String>,
 
   /// Path to file containing the template.
@@ -22,7 +22,7 @@ pub struct Args {
   pub template_file: Option<PathBuf>,
 
   /// How many times the template should repeat.
-  #[clap(short = "w", long = "width", default_value = "1")]
+  #[clap(short = "r", long = "repeat", default_value = "1")]
   pub template_repeat: usize,
 
   /// Sets "user.name" in the newly created repository.
