@@ -1,3 +1,4 @@
+use std::cmp;
 use std::fs::remove_file;
 use std::io::{self, Write};
 use std::path::Path;
@@ -90,16 +91,21 @@ fn main() -> Result<(), String> {
     println!("Final pattern:\n\n{}\n", pattern);
 
     let mut current_date = start_date.clone();
+    let mut max_progress_length = 0;
     while current_date < end_date {
         let index = ((current_date - start_date).num_days()) as usize;
         match (args.dry_run, mask[index]) {
             (false, true) => {
-                print!(
-                    "\rCurrent Date: {} (days left: {})    ",
+                let progress = format!(
+                    "\rCurrent Date: {} (days left: {})          ",
                     current_date.format(DATE_FORMAT_YMD),
                     num_days - index
                 );
+
+                max_progress_length = cmp::max(max_progress_length, progress.len());
+                print!("{}", progress);
                 io::stdout().flush().unwrap();
+
                 do_work(&args, &temp_file, current_date)
             }
 
@@ -115,6 +121,9 @@ fn main() -> Result<(), String> {
         git::add_file(&args.destination, &temp_file);
         git::commit(&args.destination, "lol: complete!", end_date);
     }
+
+    println!("\r{}", " ".repeat(max_progress_length));
+    println!("Done!");
 
     Ok(())
 }

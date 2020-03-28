@@ -41,6 +41,10 @@ fn set_user_config<S: AsRef<str>, P: AsRef<Path>>(dir: P, name: S, value: S) {
 }
 
 pub fn init(args: &Args) {
+  if args.destination.exists() {
+    panic!("The path {} already exists!", args.destination.display());
+  }
+
   let Output { status, .. } = Command::new("git")
     .args(&["init", &format!("{}", args.destination.display())])
     .output()
