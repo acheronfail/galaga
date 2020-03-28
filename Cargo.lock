@@ -79,16 +79,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "galaga"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "clap",
- "human_id",
- "transpose",
-]
-
-[[package]]
 name = "getrandom"
 version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -97,6 +87,16 @@ dependencies = [
  "cfg-if",
  "libc",
  "wasi",
+]
+
+[[package]]
+name = "ghcd"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "human_id",
+ "transpose",
 ]
 
 [[package]]
