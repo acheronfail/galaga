@@ -1,24 +1,17 @@
-use std::env;
-use std::fs::{remove_file, OpenOptions};
+use std::fs::{read_to_string, remove_file, OpenOptions};
 use std::io::Write;
 use std::process::{Command, Output};
 
-use chrono::{DateTime, Datelike, Duration, NaiveTime, Utc, Weekday};
+use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, TimeZone, Utc, Weekday};
+use clap::Clap;
 use human_id::id;
 use transpose::transpose;
 
+mod cli;
+use cli::Args;
+
 const TEMP_FILE_PATH: &str = "temp";
-const PATTERN_WIDTH: usize = 100;
 const PATTERN_HEIGHT: usize = 7;
-const PATTERN: &str = "
-XXXXXX XXXXXX
-XXX XX XX XXX
-XXX X   X XXX
-X X   X   X X
-X    X X    X
-X  XX   XX  X
-X XXXX XXXX X
-";
 
 fn git_add_file(path: String) {
     let Output { status, .. } = Command::new("git")
@@ -74,11 +67,22 @@ fn do_work(current_date: DateTime<Utc>) {
 }
 
 fn main() -> Result<(), String> {
-    // Check CLI.
-    let is_dry_run = env::args().any(|a| a == "--dry");
+    let args = Args::parse();
+
+    let pattern = match (args.pattern, args.pattern_file) {
+        (Some(s), Some(_)) | (Some(s), None) => s,
+        (None, Some(ref p)) => {
+            read_to_string(p).expect(&format!("Failed to read file: {}", p.display()))
+        }
+        (None, None) => {
+            return Err(format!(
+                "You must either pass a pattern or a path to a pattern file!"
+            ))
+        }
+    };
 
     // Prepare the mask.
-    let mask_pre: Vec<bool> = PATTERN
+    let mask_pre: Vec<bool> = pattern
         .trim()
         .chars()
         .filter_map(|c| match c {
@@ -104,10 +108,23 @@ fn main() -> Result<(), String> {
         ));
     }
 
-    // Get start and end dates. End date is the day this is run, start date is
-    // the first Sunday before the start of the pattern.
-    let end_date = Utc::now();
-    let mut start_date = end_date - Duration::days((PATTERN_WIDTH * PATTERN_HEIGHT) as i64);
+    // Parse end date or default to today.
+    let end_date = match args.end_date {
+        Some(ref s) => Utc.from_utc_datetime(
+            &NaiveDate::parse_from_str(s, "%Y-%m-%d")
+                .expect(&format!("Failed to parse end date: {}", s))
+                .and_hms(0, 0, 0),
+        ),
+        None => {
+            let today = Utc::today();
+            Utc.from_utc_datetime(
+                &NaiveDate::from_ymd(today.year(), today.month(), today.day()).and_hms(0, 0, 0),
+            )
+        }
+    };
+
+    // The start date is the first Sunday before the start of the pattern.
+    let mut start_date = end_date - Duration::days((args.pattern_width * PATTERN_HEIGHT) as i64);
     while start_date.weekday() != Weekday::Sun {
         start_date = start_date - Duration::days(1);
     }
@@ -117,7 +134,7 @@ fn main() -> Result<(), String> {
     mask = mask.iter().cycle().take(num_days).map(|r| *r).collect();
 
     // Create and stage temp file.
-    if !is_dry_run {
+    if !args.dry_run {
         write_to_temp(String::from("..."));
         git_add_file(String::from(TEMP_FILE_PATH));
     }
@@ -125,7 +142,7 @@ fn main() -> Result<(), String> {
     let mut current_date = start_date.clone();
     while current_date < end_date {
         let index = ((current_date - start_date).num_days()) as usize;
-        match (is_dry_run, mask[index]) {
+        match (args.dry_run, mask[index]) {
             // Dry run.
             (true, true) => print!("X"),
             (true, false) => print!(" "),
@@ -135,14 +152,14 @@ fn main() -> Result<(), String> {
             (false, false) => (),
         }
 
-        if is_dry_run && (index + 1) % PATTERN_HEIGHT == 0 {
+        if args.dry_run && (index + 1) % PATTERN_HEIGHT == 0 {
             println!("");
         }
 
         current_date = current_date + Duration::days(1);
     }
 
-    if !is_dry_run {
+    if !args.dry_run {
         remove_file("temp").expect("failed to remove file");
         git_commit(String::from("lol: complete!"), end_date);
     }

@@ -7,6 +7,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+clap = { git = "https://github.com/clap-rs/clap" }
 chrono = "0.4.11"
 human_id = "0.1.0"
 transpose = "0.2.0"
