@@ -1,53 +1,24 @@
-use std::fs::{read_to_string, remove_file, OpenOptions};
-use std::io::Write;
-use std::process::{Command, Output};
+use std::fs::remove_file;
+use std::path::Path;
 
 use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, TimeZone, Utc, Weekday};
 use clap::Clap;
 use human_id::id;
-use transpose::transpose;
 
 mod cli;
-use cli::Args;
+mod fs;
+mod git;
+mod pattern;
 
-const TEMP_FILE_PATH: &str = "temp";
+use cli::Args;
+use fs::write_string_to_file;
+use git::{add_file, commit, init};
+use pattern::prepare_mask;
+
 const PATTERN_HEIGHT: usize = 7;
 
-fn git_add_file(path: String) {
-    let Output { status, .. } = Command::new("git")
-        .args(&["add", &path])
-        .output()
-        .expect("Failed to run git command");
-
-    if !status.success() {
-        panic!(format!("Failed to stage file: {}", path));
-    }
-}
-
-fn git_commit(message: String, date: DateTime<Utc>) {
-    let Output { status, .. } = Command::new("git")
-        .args(&["commit", "-a", "-m", &message])
-        .env("GIT_AUTHOR_DATE", date.to_rfc2822())
-        .env("GIT_COMMITTER_DATE", date.to_rfc2822())
-        .output()
-        .expect("Failed to run git command");
-
-    if !status.success() {
-        panic!(format!("Failed to make commit for {}", date));
-    }
-}
-
-fn write_to_temp(content: String) {
-    OpenOptions::new()
-        .write(true)
-        .create(true)
-        .open(TEMP_FILE_PATH)
-        .expect("Failed to open temp file")
-        .write_fmt(format_args!("{}", content))
-        .expect("Failed to write tmp file");
-}
-
-fn do_work(current_date: DateTime<Utc>) {
+fn do_work<P: AsRef<Path>>(args: &Args, temp_file: P, current_date: DateTime<Utc>) {
+    let temp_file = temp_file.as_ref().to_path_buf();
     let start_of_day = current_date
         .date()
         .and_time(NaiveTime::from_hms(0, 0, 0))
@@ -56,11 +27,16 @@ fn do_work(current_date: DateTime<Utc>) {
     let mut current_datetime = start_of_day.clone();
     while current_datetime < (start_of_day + Duration::days(1)) {
         let date_string = &current_datetime.to_rfc2822();
-        let content = format!("{}: {}", date_string, id("-", false));
+        let commit_msg = format!("{}: {}", date_string, id("-", false));
 
-        println!("{}", content);
-        write_to_temp(content.clone());
-        git_commit(format!("lol: {}", content), current_datetime);
+        println!("{}", commit_msg);
+        write_string_to_file(&temp_file, commit_msg.clone()).expect("Failed to write temp file");
+        add_file(&args.destination, &temp_file);
+        commit(
+            &args.destination,
+            format!("lol: {}", commit_msg),
+            current_datetime,
+        );
 
         current_datetime = current_datetime + Duration::hours(1);
     }
@@ -68,45 +44,6 @@ fn do_work(current_date: DateTime<Utc>) {
 
 fn main() -> Result<(), String> {
     let args = Args::parse();
-
-    let pattern = match (args.pattern, args.pattern_file) {
-        (Some(s), Some(_)) | (Some(s), None) => s,
-        (None, Some(ref p)) => {
-            read_to_string(p).expect(&format!("Failed to read file: {}", p.display()))
-        }
-        (None, None) => {
-            return Err(format!(
-                "You must either pass a pattern or a path to a pattern file!"
-            ))
-        }
-    };
-
-    // Prepare the mask.
-    let mask_pre: Vec<bool> = pattern
-        .trim()
-        .chars()
-        .filter_map(|c| match c {
-            'X' => Some(true),
-            ' ' => Some(false),
-            _ => None,
-        })
-        .collect();
-
-    let mut mask = vec![false; mask_pre.len()];
-    transpose(
-        &mask_pre,
-        &mut mask,
-        mask_pre.len() / PATTERN_HEIGHT,
-        PATTERN_HEIGHT,
-    );
-
-    if mask.len() % PATTERN_HEIGHT != 0 {
-        return Err(format!(
-            "Pattern length ({}) must be divisible by {}",
-            mask.len(),
-            PATTERN_HEIGHT
-        ));
-    }
 
     // Parse end date or default to today.
     let end_date = match args.end_date {
@@ -129,15 +66,18 @@ fn main() -> Result<(), String> {
         start_date = start_date - Duration::days(1);
     }
 
-    // Ensure our mask is long enough for our number of days.
+    // Prepare the mask.
     let num_days = (end_date - start_date).num_days() as usize;
-    mask = mask.iter().cycle().take(num_days).map(|r| *r).collect();
+    let mask = prepare_mask(&args, num_days)?;
 
-    // Create and stage temp file.
-    if !args.dry_run {
-        write_to_temp(String::from("..."));
-        git_add_file(String::from(TEMP_FILE_PATH));
-    }
+    // Prepare repository.
+    init(&args);
+
+    // Prepare file which will be used in all commits.
+    let temp_file = args.destination.join("temp").to_path_buf();
+    write_string_to_file(&temp_file, String::from("...")).expect("Failed to write temp file");
+    add_file(&args.destination, &temp_file);
+    commit(&args.destination, "lol: start your engines!", start_date);
 
     let mut current_date = start_date.clone();
     while current_date < end_date {
@@ -148,7 +88,7 @@ fn main() -> Result<(), String> {
             (true, false) => print!(" "),
 
             // Real thing.
-            (false, true) => do_work(current_date),
+            (false, true) => do_work(&args, &temp_file, current_date),
             (false, false) => (),
         }
 
@@ -159,10 +99,8 @@ fn main() -> Result<(), String> {
         current_date = current_date + Duration::days(1);
     }
 
-    if !args.dry_run {
-        remove_file("temp").expect("failed to remove file");
-        git_commit(String::from("lol: complete!"), end_date);
-    }
+    remove_file(&temp_file).expect("Failed to remove temp file");
+    commit(&args.destination, "lol: complete!", end_date);
 
     Ok(())
 }
