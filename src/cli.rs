@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use clap::Clap;
 
 #[derive(Clap)]
-#[clap(version = "1.0", author = "Kevin K.")]
+#[clap(version = "1.0")]
 pub struct Args {
   /// The destination of the new git directory.
   pub destination: PathBuf,
@@ -13,17 +13,17 @@ pub struct Args {
   #[clap(short = "e", long = "end")]
   pub end_date: Option<String>,
 
-  /// The pattern itself.
-  #[clap(short = "p", long = "pattern")]
-  pub pattern: Option<String>,
+  /// The template itself.
+  #[clap(short = "p", long = "template")]
+  pub template: Option<String>,
 
-  /// Path to file containing the pattern.
+  /// Path to file containing the template.
   #[clap(short = "f", long = "file")]
-  pub pattern_file: Option<PathBuf>,
+  pub template_file: Option<PathBuf>,
 
-  /// Width (in weeks, which map to vertical columns) of the pattern.
-  #[clap(short = "w", long = "width", default_value = "104")]
-  pub pattern_width: usize,
+  /// How many times the template should repeat.
+  #[clap(short = "w", long = "width", default_value = "1")]
+  pub template_repeat: usize,
 
   /// Sets "user.name" in the newly created repository.
   #[clap(short = "N", long = "git-user-name")]
@@ -33,8 +33,8 @@ pub struct Args {
   #[clap(short = "E", long = "git-user-email")]
   pub git_user_email: Option<String>,
 
-  /// Whether or not to perform a dry run (don't actually make any commits).
-  /// TODO: just make a new repository? that way it's non destructive?
+  /// Whether or not to perform a dry run. This won't create a new repository,
+  /// it will just run log out the generated pattern.
   #[clap(short = "d", long = "dry-run")]
   pub dry_run: bool,
 }
