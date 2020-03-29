@@ -4,8 +4,9 @@ use std::path::Path;
 
 pub fn write_string_to_file<P: AsRef<Path>>(path: P, content: String) -> io::Result<()> {
   OpenOptions::new()
-    .write(true)
     .create(true)
+    .write(true)
+    .truncate(true)
     .open(path)?
     .write_fmt(format_args!("{}", content))
 }
