@@ -1,9 +1,10 @@
 use std::path::PathBuf;
 
 use clap::Clap;
+use clap::{crate_authors, crate_version};
 
 #[derive(Clap)]
-#[clap(version = "1.0")]
+#[clap(version = crate_version!(), author = crate_authors!())]
 pub struct Args {
   /// The destination of the new git directory.
   pub destination: PathBuf,
