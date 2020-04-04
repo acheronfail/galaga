@@ -26,7 +26,7 @@ fn do_work<P: AsRef<Path>>(args: &Args, temp_file: P, current_date: DateTime<Utc
         .and_time(NaiveTime::from_hms(0, 0, 0))
         .expect("...");
 
-    let mut current_datetime = start_of_day.clone();
+    let mut current_datetime = start_of_day;
     while current_datetime < (start_of_day + Duration::days(1)) {
         let date_string = &current_datetime.to_rfc2822();
         let commit_msg = format!("{}: {}", date_string, id("-", false));
@@ -50,7 +50,7 @@ fn main() -> Result<(), String> {
     let mut end_date = match args.end_date {
         Some(ref s) => Utc.from_utc_datetime(
             &NaiveDate::parse_from_str(s, DATE_FORMAT_YMD)
-                .expect(&format!("Failed to parse end date: {}", s))
+                .unwrap_or_else(|_| panic!("Failed to parse end date: {}", s))
                 .and_hms(0, 0, 0),
         ),
         None => {
@@ -78,7 +78,7 @@ fn main() -> Result<(), String> {
     let mask = pattern.mask();
 
     // Prepare repository and create the file which will be used in all commits.
-    let temp_file = args.destination.join("temp").to_path_buf();
+    let temp_file = args.destination.join("temp");
     if !args.dry_run {
         git::init(&args);
         write_string_to_file(&temp_file, String::from("...")).expect("Failed to write temp file");
@@ -94,27 +94,22 @@ fn main() -> Result<(), String> {
     println!("Using template:\n\n{}\n", pattern.template());
     println!("Final pattern:\n\n{}\n", pattern);
 
-    let mut current_date = start_date.clone();
+    let mut current_date = start_date;
     let mut max_progress_length = 0;
     while current_date < end_date {
         let index = ((current_date - start_date).num_days()) as usize;
-        match (args.dry_run, mask[index]) {
-            (false, true) => {
-                let progress = format!(
-                    "\rCurrent Date: {} (days left: {})          ",
-                    current_date.format(DATE_FORMAT_YMD),
-                    num_days - index
-                );
+        if let (false, true) = (args.dry_run, mask[index]) {
+            let progress = format!(
+                "\rCurrent Date: {} (days left: {})          ",
+                current_date.format(DATE_FORMAT_YMD),
+                num_days - index
+            );
 
-                max_progress_length = cmp::max(max_progress_length, progress.len());
-                print!("{}", progress);
-                io::stdout().flush().unwrap();
+            max_progress_length = cmp::max(max_progress_length, progress.len());
+            print!("{}", progress);
+            io::stdout().flush().unwrap();
 
-                do_work(&args, &temp_file, current_date)
-            }
-
-            // Dry run or an empty grid.
-            _ => (),
+            do_work(&args, &temp_file, current_date)
         }
 
         current_date = current_date + Duration::days(1);

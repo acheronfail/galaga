@@ -16,7 +16,9 @@ impl Pattern {
   pub fn new(args: &Args) -> Pattern {
     let template = match (args.template.as_ref(), args.template_file.as_ref()) {
       (Some(s), Some(_)) | (Some(s), None) => String::from(s),
-      (None, Some(p)) => read_to_string(p).expect(&format!("Failed to read file: {}", p.display())),
+      (None, Some(p)) => {
+        read_to_string(p).unwrap_or_else(|_| panic!("Failed to read file: {}", p.display()))
+      }
       (None, None) => panic!("You must either pass a template or a path to a template file!"),
     };
 
@@ -56,7 +58,7 @@ impl Pattern {
       .iter()
       .cycle()
       .take(width * PATTERN_HEIGHT)
-      .map(|r| *r)
+      .copied()
       .collect();
 
     Pattern {
