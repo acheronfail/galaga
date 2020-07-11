@@ -1,49 +1,52 @@
-use std::cmp;
-use std::fs::remove_file;
-use std::io::{self, Write};
-use std::path::Path;
-
-use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, TimeZone, Utc, Weekday};
-use clap::Clap;
-use human_id::id;
-
 mod cli;
 mod fs;
 mod git;
 mod pattern;
 
+use std::cmp;
+use std::fs::remove_file;
+use std::io::{self, Write};
+use std::path::Path;
+
+use anyhow::Result;
+use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, TimeZone, Utc, Weekday};
+use clap::Clap;
+use human_id::id;
+
 use cli::Args;
-use fs::write_string_to_file;
+use fs::write_str_to_file;
 use pattern::Pattern;
 
 const PATTERN_HEIGHT: usize = 7;
 const DATE_FORMAT_YMD: &str = "%Y-%m-%d";
 
-fn do_work<P: AsRef<Path>>(args: &Args, temp_file: P, current_date: DateTime<Utc>) {
+fn do_work<P: AsRef<Path>>(args: &Args, temp_file: P, current_date: DateTime<Utc>) -> Result<()> {
     let temp_file = temp_file.as_ref().to_path_buf();
     let start_of_day = current_date
         .date()
         .and_time(NaiveTime::from_hms(0, 0, 0))
-        .expect("...");
+        .unwrap();
 
     let mut current_datetime = start_of_day;
     while current_datetime < (start_of_day + Duration::days(1)) {
         let date_string = &current_datetime.to_rfc2822();
         let commit_msg = format!("{}: {}", date_string, id("-", false));
 
-        write_string_to_file(&temp_file, commit_msg.clone()).expect("Failed to write temp file");
-        git::add_file(&args.destination, &temp_file);
+        write_str_to_file(&temp_file, commit_msg.clone()).expect("failed to write temp file");
+        git::add_file(&args.destination, &temp_file)?;
         git::commit(
             &args.destination,
             format!("lol: {}", commit_msg),
             current_datetime,
-        );
+        )?;
 
         current_datetime = current_datetime + Duration::hours(1);
     }
+
+    Ok(())
 }
 
-fn main() -> Result<(), String> {
+fn main() -> Result<()> {
     let args = Args::parse();
 
     // Parse end date or default to today.
@@ -61,7 +64,7 @@ fn main() -> Result<(), String> {
         }
     };
 
-    let pattern = Pattern::new(&args);
+    let pattern = Pattern::from_args(&args)?;
 
     // The start date is the first Sunday before the start of the pattern.
     let mut start_date = end_date - Duration::days((pattern.width() * PATTERN_HEIGHT) as i64);
@@ -80,10 +83,10 @@ fn main() -> Result<(), String> {
     // Prepare repository and create the file which will be used in all commits.
     let temp_file = args.destination.join("temp");
     if !args.dry_run {
-        git::init(&args);
-        write_string_to_file(&temp_file, String::from("...")).expect("Failed to write temp file");
-        git::add_file(&args.destination, &temp_file);
-        git::commit(&args.destination, "lol: start your engines!", start_date);
+        git::init(&args)?;
+        write_str_to_file(&temp_file, String::from("...")).expect("Failed to write temp file");
+        git::add_file(&args.destination, &temp_file)?;
+        git::commit(&args.destination, "lol: start your engines!", start_date)?;
     }
 
     println!("Start Date:      {}", start_date.format(DATE_FORMAT_YMD));
@@ -107,9 +110,9 @@ fn main() -> Result<(), String> {
 
             max_progress_length = cmp::max(max_progress_length, progress.len());
             print!("{}", progress);
-            io::stdout().flush().unwrap();
+            io::stdout().flush()?;
 
-            do_work(&args, &temp_file, current_date)
+            do_work(&args, &temp_file, current_date)?;
         }
 
         current_date = current_date + Duration::days(1);
@@ -117,8 +120,8 @@ fn main() -> Result<(), String> {
 
     if !args.dry_run {
         remove_file(&temp_file).expect("Failed to remove temp file");
-        git::add_file(&args.destination, &temp_file);
-        git::commit(&args.destination, "lol: complete!", end_date);
+        git::add_file(&args.destination, &temp_file)?;
+        git::commit(&args.destination, "lol: complete!", end_date)?;
     }
 
     println!("\r{}", " ".repeat(max_progress_length));

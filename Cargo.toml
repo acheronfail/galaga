@@ -10,7 +10,8 @@ homepage = "https://github.com/acheronfail/galaga"
 repository = "https://github.com/acheronfail/galaga"
 
 [dependencies]
-clap = { git = "https://github.com/clap-rs/clap" }
+anyhow = "1.0.31"
 chrono = "0.4.11"
+clap = "3.0.0-beta.1"
 human_id = "0.1.0"
 transpose = "0.2.0"
